@@ -15,7 +15,7 @@ Note: The data contains some quality issues. / 注意：資料中包含一些品
 
 ## AI
 
-OpenRouter key (shared, rate-limited / 共用，有額度限制): `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`
+OpenRouter key will be provided separately via 104. / OpenRouter key 將透過 104 另行提供。
 
 Use any model. Be efficient.
 
