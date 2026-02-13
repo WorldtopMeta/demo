@@ -1,46 +1,89 @@
-# TradeXchange AI Assessment / TradeXchange AI 評估作業
+﻿# ai-trade-query (Vue3 + Element Plus + Python)
 
-Build a web UI where users ask natural language questions about trade data, an LLM converts them to SQL, and results display.
+This project implements a web UI where users ask natural-language trade-data questions. The backend asks an LLM to generate SQL, applies SQL guard rules, fetches `countries_lpi` from Supabase REST (read-only), executes SQL in-memory, and returns table-ready data.
 
-建立一個網頁介面，讓使用者用自然語言詢問貿易數據問題，由 LLM 轉換成 SQL 查詢，並顯示結果。
+## Project Structure
 
-## Database / 資料庫
+- `frontend/`: Vue3 + Element Plus UI
+- `backend/`: FastAPI API with LLM-to-SQL pipeline
 
-Supabase (read-only / 唯讀):
-- URL: `https://bqyrjnpwiwldppbkeafk.supabase.co`
-- Anon key: `eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImJxeXJqbnB3aXdsZHBwYmtlYWZrIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzAyMzI0MDcsImV4cCI6MjA4NTgwODQwN30.JmzMN1xU_yhGzW4Ki_d6PpJqkTpVjDHA7dkyen4w6Rg`
-- Table / 資料表: `countries_lpi` (id, country, region, lpi_score, year)
+## Data Flow
 
-Note: The data contains some quality issues. / 注意：資料中包含一些品質問題。
+1. User question from UI
+2. `POST /api/query`
+3. Normalize input
+4. OpenRouter model generates JSON `{ sql, confidence, notes, assumptions }`
+5. SQL guard checks:
+   - only `SELECT`
+   - only `countries_lpi`
+   - no comments (`--`, `/* */`)
+   - no multi-statement (`;`)
+   - block `pg_catalog` / `information_schema`
+6. Fetch `countries_lpi` from Supabase REST with anon key
+7. Execute guarded SQL in local in-memory SQLite
+8. Return `{ sql, columns, rows, meta }`
 
-## AI
+## Required Queries Covered
 
-OpenRouter key will be provided separately via 104. / OpenRouter key 將透過 104 另行提供。
+- `亞洲哪些國家的 LPI > 3.0`
+- `各區域平均 LPI`
+- `物流表現前五名` (default: latest year)
 
-Use any model. Be efficient.
+## Backend Setup
 
-可使用任何模型，請節約使用。
+```bash
+cd backend
+python -m venv .venv
+.\.venv\Scripts\activate
+pip install -r requirements.txt
+copy .env.example .env
+uvicorn app.main:app --reload --port 8000
+```
 
-## Requirements / 需求
+Required env vars in `backend/.env`:
 
-Make these three queries work / 讓以下三個查詢能正常運作：
+- `OPENROUTER_API_KEY`
+- `OPENROUTER_MODEL` (default `openai/gpt-4o-mini`)
+- `SUPABASE_URL` (example: `https://bqyrjnpwiwldppbkeafk.supabase.co`)
+- `SUPABASE_ANON_KEY` (read-only anon key)
+- `CORS_ORIGINS` (default `http://localhost:5173`)
 
-1. "Which countries in Asia have an LPI score above 3.0?" / 「亞洲有哪些國家的 LPI 分數高於 3.0？」
-2. "What's the average LPI score by region?" / 「各區域的平均 LPI 分數是多少？」
-3. "Show me the top 5 countries by logistics performance" / 「顯示物流表現前五名的國家」
+## Frontend Setup
 
-## Submit / 繳交方式
+```bash
+cd frontend
+npm install
+copy .env.example .env
+npm run dev
+```
 
-- Fork this repo, build your solution / Fork 此 repo，建立你的解決方案
-- Include a ~2 min screen recording demo (Loom, QuickTime, OBS, or any tool) / 附上約 2 分鐘的螢幕錄影示範（Loom、QuickTime、OBS 或任何工具皆可）
-- Send your repo link + video to us on 104 within 48 hours of receiving this assignment / 收到此作業後 48 小時內，將 repo 連結與影片寄至 104
+Env var in `frontend/.env`:
 
-Any stack is fine. We're looking at: correctness, error handling, code clarity.
+- `VITE_API_BASE=http://localhost:8000`
 
-可使用任何技術棧。評估重點：正確性、錯誤處理、程式碼清晰度。
+## API Contract
 
-## Questions? / 有問題嗎？
+### Request
 
-If anything is unclear or you run into issues, reach out on 104. The OpenRouter key is shared across candidates — if it stops working, let us know.
+`POST /api/query`
 
-如有任何不清楚或遇到問題，請聯繫 104。OpenRouter key 為所有應徵者共用，若無法使用請告知我們。
+```json
+{ "question": "亞洲哪些國家的 LPI > 3.0" }
+```
+
+### Response
+
+```json
+{
+  "sql": "SELECT ...",
+  "columns": ["country", "region", "lpi_score", "year"],
+  "rows": [{"country": "..."}],
+  "meta": {
+    "row_count": 5,
+    "confidence": 0.9,
+    "notes": "...",
+    "assumptions": ["..."],
+    "default_limit_applied": false
+  }
+}
+```
